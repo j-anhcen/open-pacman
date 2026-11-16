@@ -8,6 +8,7 @@ const actionBtn = document.getElementById( 'action-btn' );
 
 let game = createGame();
 let frame = 0;
+let lastTime = performance.now();
 
 const KEY_DIR = {
   ArrowLeft: 'left',
@@ -39,10 +40,15 @@ function startGame() {
 
 if ( actionBtn ) actionBtn.addEventListener( 'click', startGame );
 
-function loop() {
+function loop( now ) {
+  // dt en segundos, acotado para que una pestaña en segundo plano no
+  // dispare de golpe todos los temporizadores de salida.
+  const dt = Math.min( ( now - lastTime ) / 1000, 0.1 );
+  lastTime = now;
+
   frame++;
   if ( game.state === 'playing' ) {
-    update( game );
+    update( game, dt );
     if ( game.state === 'won' ) showOverlay( 'GANASTE', 'win', 'Reiniciar' );
     else if ( game.state === 'lost' ) showOverlay( 'PERDISTE', 'lose', 'Reiniciar' );
   }
@@ -50,4 +56,4 @@ function loop() {
   requestAnimationFrame( loop );
 }
 
-loop();
+requestAnimationFrame( loop );

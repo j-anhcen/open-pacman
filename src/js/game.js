@@ -13,6 +13,11 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 const PACMAN_SPEED = 0.0625; // 1/16 celda/frame -> alinea cada 16 frames
 const GHOST_SPEED = 0.05;    // 1/20 celda/frame
 
+// Constantes de salida escalonada (spec 03)
+// Cada fantasma sale de la pen a un tiempo absoluto desde el inicio de la
+// partida: el primero a 1,5 s, y luego uno mas cada 1,5 s.
+const GHOST_RELEASE_INTERVAL = 1.5; // segundos
+
 // Constantes de comportamiento (spec 01)
 const CLYDE_FLEE_DISTANCE = 8;                 // umbral Manhattan (celdas)
 const CLYDE_CORNER_TARGET = { x: 1, y: 29 };  // celda objetivo de huida (inferior izquierda transitable)
@@ -81,6 +86,7 @@ function createGame() {
     lives: 3,
     dotsRemaining: dots,
     grid,
+    elapsed: 0, // segundos de partida, para la salida escalonada
     pacman: {
       x: PACMAN_START.x,
       y: PACMAN_START.y,
@@ -88,13 +94,16 @@ function createGame() {
       nextDir: null,
       speed: PACMAN_SPEED,
     },
-    ghosts: GHOST_STARTS.map( ( g ) => ( {
+    ghosts: GHOST_STARTS.map( ( g, i ) => ( {
       x: g.x,
       y: g.y,
       dir: 'up',
       speed: GHOST_SPEED,
       kind: g.kind,
       name: g.name,
+      // Tiempo de salida: 1,5 s / 3 s / 4,5 s / 6 s segun el orden.
+      releaseAt: GHOST_RELEASE_INTERVAL * ( i + 1 ),
+      released: false,
     } ) ),
   };
 }
@@ -265,10 +274,12 @@ function resetPositions( game ) {
   p.y = PACMAN_START.y;
   p.dir = 'left';
   p.nextDir = null;
+  game.elapsed = 0;
   game.ghosts.forEach( ( g, i ) => {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.released = false;
   } );
 }
 
@@ -276,9 +287,20 @@ function collides( a, b ) {
   return Math.abs( a.x - b.x ) < 0.5 && Math.abs( a.y - b.y ) < 0.5;
 }
 
-function update( game ) {
+function update( game, dt ) {
+  // Reloj en segundos. Si el bucle no pasa dt, se asume ~60 fps.
+  game.elapsed += dt || 1 / 60;
+
   movePacman( game );
-  game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
+
+  game.ghosts.forEach( ( g ) => {
+    // Salida escalonada: hasta su tiempo, el fantasma espera quieto en la pen.
+    if ( !g.released ) {
+      if ( game.elapsed < g.releaseAt ) return;
+      g.released = true;
+    }
+    moveGhost( game, g );
+  } );
 
   for ( const g of game.ghosts ) {
     if ( collides( game.pacman, g ) ) {
