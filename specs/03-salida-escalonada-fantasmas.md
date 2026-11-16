@@ -1,6 +1,6 @@
 # SPEC 03 — Salida escalonada de los fantasmas desde la pen
 
-> **Status:** Approved  
+> **Status:** Implementado  
 > **Depends on:** 01-cuatro-fantasmas, 02-salida-fantasmas-pen  
 > **Date:** 2026-11-16  
 > **Objective:** Hacer que los cuatro fantasmas abandonen la pen de forma escalonada, con una salida cada 1,5 segundos desde el inicio de la partida.
