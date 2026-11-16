@@ -10,8 +10,14 @@ const DIRS = {
 };
 const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 
-const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
-const GHOST_SPEED = 0.1;    // 1/10 celda/frame
+const PACMAN_SPEED = 0.0625; // 1/16 celda/frame -> alinea cada 16 frames
+const GHOST_SPEED = 0.05;    // 1/20 celda/frame
+
+// Constantes de comportamiento (spec 01)
+const CLYDE_FLEE_DISTANCE = 8;                 // umbral Manhattan (celdas)
+const CLYDE_CORNER_TARGET = { x: 1, y: 29 };  // celda objetivo de huida (inferior izquierda transitable)
+const PINKY_AHEAD = 4;                         // celdas por delante de Pac-Man
+const INKY_AHEAD = 2;                          // celdas por delante para el cálculo de Inky
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
@@ -42,6 +48,7 @@ function createGame() {
       dir: 'up',
       speed: GHOST_SPEED,
       kind: g.kind,
+      name: g.name,
     } ) ),
   };
 }
@@ -110,6 +117,43 @@ function movePacman( game ) {
   wrapTunnel( p, width );
 }
 
+// Helpers de objetivo (spec 01)
+function pacmanCell( p ) {
+  return { x: Math.round( p.x ), y: Math.round( p.y ) };
+}
+
+function cellAhead( actor, n ) {
+  const base = { x: Math.round( actor.x ), y: Math.round( actor.y ) };
+  const d = DIRS[ actor.dir ];
+  if ( !d ) return base;
+  return { x: base.x + d.x * n, y: base.y + d.y * n };
+}
+
+function manhattan( a, b ) {
+  return Math.abs( a.x - b.x ) + Math.abs( a.y - b.y );
+}
+
+function bestDirToTarget( choices, fromX, fromY, target ) {
+  let best = choices[ 0 ];
+  let bestDist = Infinity;
+  for ( const dir of choices ) {
+    const d = DIRS[ dir ];
+    if ( !d ) continue;
+    const nx = fromX + d.x;
+    const ny = fromY + d.y;
+    const dist = manhattan( { x: nx, y: ny }, target );
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
+    }
+  }
+  return best;
+}
+
+function getBlinky( ghosts ) {
+  return ghosts.find( ( g ) => g.kind === 'blinky' ) || null;
+}
+
 function decideGhost( game, g ) {
   const grid = game.grid;
   const p = game.pacman;
@@ -118,27 +162,35 @@ function decideGhost( game, g ) {
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
   );
   // Sin salida (callejon): permitir el giro de 180.
-  const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
+  const choices = options.length ? options : [ OPPOSITE[ g.dir ] ];
 
-  if ( g.kind === 'hunter' ) {
-    const px = Math.round( p.x );
-    const py = Math.round( p.y );
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( dist < bestDist ) {
-        bestDist = dist;
-        best = dir;
-      }
+  const pCell = pacmanCell( p );
+  let target = pCell;
+
+  if ( g.kind === 'blinky' ) {
+    target = pCell;
+  } else if ( g.kind === 'pinky' ) {
+    target = cellAhead( p, PINKY_AHEAD );
+  } else if ( g.kind === 'inky' ) {
+    const blinky = getBlinky( game.ghosts );
+    const ahead = cellAhead( p, INKY_AHEAD );
+    if ( blinky && DIRS[ p.dir ] ) {
+      const bCell = { x: Math.round( blinky.x ), y: Math.round( blinky.y ) };
+      target = {
+        x: bCell.x + 2 * ( ahead.x - bCell.x ),
+        y: bCell.y + 2 * ( ahead.y - bCell.y ),
+      };
+    } else {
+      target = pCell;
     }
-    g.dir = best;
-  } else {
-    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
+  } else if ( g.kind === 'clyde' ) {
+    const gCell = { x: Math.round( g.x ), y: Math.round( g.y ) };
+    target = manhattan( gCell, pCell ) > CLYDE_FLEE_DISTANCE
+      ? pCell
+      : CLYDE_CORNER_TARGET;
   }
+
+  g.dir = bestDirToTarget( choices, g.x, g.y, target );
 }
 
 function moveGhost( game, g ) {
