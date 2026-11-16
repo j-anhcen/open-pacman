@@ -1,6 +1,6 @@
 # SPEC 01 — Cuatro fantasmas clásicos con comportamientos diferenciados
 
-> **Status:** Aprobado  
+> **Status:** Implementado  
 > **Depends on:** —  
 > **Date:** 2026-11-15  
 > **Objective:** Añadir los cuatro fantasmas clásicos de Pac-Man al juego, cada uno con un comportamiento de movimiento propio y con Blinky persiguiendo agresivamente a Pac-Man.
