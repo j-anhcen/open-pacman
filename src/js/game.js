@@ -19,6 +19,52 @@ const CLYDE_CORNER_TARGET = { x: 1, y: 29 };  // celda objetivo de huida (inferi
 const PINKY_AHEAD = 4;                         // celdas por delante de Pac-Man
 const INKY_AHEAD = 2;                          // celdas por delante para el cálculo de Inky
 
+// Constantes de salida de la pen (spec 02)
+// La zona de la pen se deriva de la geometría del mapa: la puerta son los
+// tiles 3 y el interior son las celdas vacías encerradas justo debajo.
+const PEN = penBounds( MAZE );
+const PEN_EXIT_TARGET = { x: PEN.doorMin, y: PEN.doorRow - 1 }; // pasillo sobre la puerta
+
+// Calcula los límites de la pen a partir de la puerta (tiles 3) del grid:
+// columnas de la puerta, fila de la puerta y rectángulo interior transitable.
+function penBounds( grid ) {
+  const height = grid.length;
+  const width = grid[ 0 ].length;
+  let doorRow = -1;
+  let doorMin = Infinity;
+  let doorMax = -Infinity;
+  for ( let y = 0; y < height; y++ ) {
+    for ( let x = 0; x < width; x++ ) {
+      if ( grid[ y ][ x ] === 3 ) {
+        doorRow = y;
+        doorMin = Math.min( doorMin, x );
+        doorMax = Math.max( doorMax, x );
+      }
+    }
+  }
+
+  // Interior: desde las columnas de la puerta, en la fila de abajo, expandir
+  // mientras las celdas sean transitables (0).
+  const y0 = doorRow + 1;
+  let x0 = doorMin;
+  let x1 = doorMax;
+  while ( x0 > 0 && grid[ y0 ][ x0 - 1 ] === 0 ) x0--;
+  while ( x1 < width - 1 && grid[ y0 ][ x1 + 1 ] === 0 ) x1++;
+  let y1 = y0;
+  while ( y1 + 1 < height && grid[ y1 + 1 ][ x0 ] === 0 ) y1++;
+
+  return { doorRow, doorMin, doorMax, x0, x1, y0, y1 };
+}
+
+// Sigue el fantasma dentro de la pen? Incluye la fila de la puerta para que el
+// objetivo de salida no cambie justo al cruzar la puerta (evita oscilaciones).
+function isInPen( g ) {
+  const x = Math.round( g.x );
+  const y = Math.round( g.y );
+  if ( y === PEN.doorRow ) return x >= PEN.doorMin && x <= PEN.doorMax;
+  return y >= PEN.y0 && y <= PEN.y1 && x >= PEN.x0 && x <= PEN.x1;
+}
+
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
 function createGame() {
@@ -167,7 +213,10 @@ function decideGhost( game, g ) {
   const pCell = pacmanCell( p );
   let target = pCell;
 
-  if ( g.kind === 'blinky' ) {
+  // Mientras el fantasma siga en la pen, priorizar la salida al mapa (spec 02).
+  if ( isInPen( g ) ) {
+    target = PEN_EXIT_TARGET;
+  } else if ( g.kind === 'blinky' ) {
     target = pCell;
   } else if ( g.kind === 'pinky' ) {
     target = cellAhead( p, PINKY_AHEAD );
